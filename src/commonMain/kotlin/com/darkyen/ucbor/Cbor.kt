@@ -16,7 +16,7 @@ class CborRead(
     internal val _br: ByteRead
     ) {
 
-    // Fields and methods that are underscore prefixed are internal published API, but should be threated as private.
+    // Fields and methods that are underscore prefixed are internal published API, but should be treated as private.
 
     enum class CborValueType {
         /** Pseudo-type, means that there are no more values. */
