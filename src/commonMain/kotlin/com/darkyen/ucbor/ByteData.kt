@@ -441,7 +441,7 @@ abstract class ChunkedByteRead : ByteRead {
 		// Refill buffer
 		if (buffer.size < bytes) {
 			// Grow buffer
-			val newBuffer = ByteArray(max(bytes, max(512, buffer.size * 2)))
+			val newBuffer = ByteArray(max(bytes, max(4096, buffer.size * 2)))
 			buffer.copyInto(newBuffer, 0, nextRead, nextWrite)
 			buffer = newBuffer
 			nextWrite -= nextRead

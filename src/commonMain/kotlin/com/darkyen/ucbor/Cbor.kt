@@ -269,11 +269,11 @@ class CborRead(
     }
 
     @Throws(CborDecodeException::class)
-    inline fun <T> read(handle: CborReadSingleValue.(type: CborValueType) -> T): T {
+    inline fun <T> read(handle: CborReadSingle.(type: CborValueType) -> T): T {
         val remainingBefore = _payloadRemaining
         val header = _readHeader()
         try {
-            return handle(CborReadSingleValue(this@CborRead), header)
+            return handle(CborReadSingle(this), header)
         } catch(e: Throwable) {
             _payloadRemaining = REMAINING_ERROR
             throw e
@@ -306,7 +306,7 @@ class CborRead(
         }
     }
 
-    /** @see CborReadSingleValue.value */
+    /** @see CborReadSingle.value */
     @Throws(CborDecodeException::class)
     fun value(): CborValue? {
         return read { value() }
@@ -331,7 +331,7 @@ class CborRead(
      */
     @ReadDsl
     @JvmInline
-    value class CborReadSingleValue(@PublishedApi internal val _cr: CborRead) {
+    value class CborReadSingle(@PublishedApi internal val _cr: CborRead) {
 
         val type: CborValueType
             get() = _cr._headerType
@@ -553,16 +553,16 @@ class CborRead(
             }
         }
 
-        inline fun <K, V> mapInto(out:MutableMap<K, V>, readKey: CborReadSingle.()->K, readValue: CborReadSingle.()->V) {
+        inline fun <K, V> mapInto(out:MutableMap<K, V>, readKey: CborDeserialize<K>, readValue: CborDeserialize<V>) {
             return mapRaw m@{
                 while (true) {
                     val k = read { type ->
                         if (type == CborValueType.END) {
                             return@m
                         }
-                        readKey()
+                        value(readKey)
                     }
-                    val v = read { readValue() }
+                    val v = value(readValue)
                     out[k] = v
                 }
             }
@@ -573,7 +573,7 @@ class CborRead(
          * @throws CborDecodeException when the value is not a [T] or is an invalid value
          */
         @Throws(CborDecodeException::class)
-        fun <T> value(serializer: CborSerializer<T>):T {
+        inline fun <T> value(serializer: CborDeserialize<T>):T {
             return with(serializer) {
                 deserialize()
             }
@@ -678,15 +678,15 @@ class CborRead(
          */
         inline fun <T> obj(read: CborReadFields.() -> T):T {
             return mapRaw {
-                val oldFieldProgress = this@CborReadSingleValue._cr._fieldProgress
-                this@CborReadSingleValue._cr._fieldProgress = FIELD_NONE
+                val oldFieldProgress = this@CborReadSingle._cr._fieldProgress
+                this@CborReadSingle._cr._fieldProgress = FIELD_NONE
                 try {
-                    val crf = CborReadFields(this@CborReadSingleValue._cr)
+                    val crf = CborReadFields(this@CborReadSingle._cr)
                     val result = read(crf)
                     crf._skipRemainingFields()
                     result
                 } finally {
-                    this@CborReadSingleValue._cr._fieldProgress = oldFieldProgress
+                    this@CborReadSingle._cr._fieldProgress = oldFieldProgress
                 }
             }
         }
@@ -774,7 +774,7 @@ class CborRead(
             _cr._fieldProgress = FIELD_END
         }
 
-        inline fun <T> field(fieldId: Int, read: CborReadSingleValue.(CborValueType) -> T, fieldMissing: () -> T): T {
+        inline fun <T> field(fieldId: Int, read: CborReadSingle.(CborValueType) -> T, fieldMissing: () -> T): T {
             return if (fieldInternal(fieldId)) {
                 _cr.read(read)
             } else {
@@ -782,23 +782,23 @@ class CborRead(
             }
         }
 
-        inline fun <T> field(fieldId: Int, read: CborReadSingleValue.(CborValueType) -> T): T {
+        inline fun <T> field(fieldId: Int, read: CborReadSingle.(CborValueType) -> T): T {
             return field(fieldId, read) { throw CborDecodeException("Required field $fieldId is missing") }
         }
 
-        inline fun <T : TD, TD> fieldOr(fieldId: Int, default:TD, read: CborReadSingleValue.(CborValueType) -> T): TD {
+        inline fun <T : TD, TD> fieldOr(fieldId: Int, default:TD, read: CborReadSingle.(CborValueType) -> T): TD {
             return field(fieldId, read) { default }
         }
 
-        fun <T> field(fieldId: Int, serializer: CborSerializer<T>): T {
+        fun <T> field(fieldId: Int, serializer: CborDeserialize<T>): T {
             return field(fieldId) { value(serializer) }
         }
 
-        fun <T : TD, TD> fieldOr(fieldId: Int, default:TD, serializer: CborSerializer<T>): TD {
+        fun <T : TD, TD> fieldOr(fieldId: Int, default:TD, serializer: CborDeserialize<T>): TD {
             return field(fieldId, { value(serializer) }, { default })
         }
 
-        fun <T> fieldOrNull(fieldId: Int, serializer: CborSerializer<T>): T? {
+        fun <T> fieldOrNull(fieldId: Int, serializer: CborDeserialize<T>): T? {
             return field(fieldId, {
                 if (type == CborValueType.NULL) {
                     null
@@ -822,6 +822,13 @@ class CborRead(
 
         fun fieldFloatOrZero(fieldId: Int): Double {
             return field(fieldId, { if (type.float) float() else 0.0 }, { 0.0 })
+        }
+
+        fun fieldStringOrNull(fieldId: Int): String? {
+            return field(fieldId, { if (type == CborValueType.TEXT) string().toString() else null }, { null })
+        }
+        fun fieldBlobOrNull(fieldId: Int): ByteArray? {
+            return field(fieldId, { if (type == CborValueType.BLOB) blob() else null }, { null })
         }
     }
 
@@ -921,87 +928,89 @@ class CborRead(
 
     //region Quick read functions
 
-    /** @see CborReadSingleValue.int */
+    /** @see CborReadSingle.int */
     @Throws(CborDecodeException::class)
     fun int(): Long {
         return read { int() }
     }
 
-    /** @see CborReadSingleValue.boolean */
+    /** @see CborReadSingle.boolean */
     @Throws(CborDecodeException::class)
     fun boolean(): Boolean {
         return read { boolean() }
     }
 
-    /** @see CborReadSingleValue.null */
+    /** @see CborReadSingle.null */
     @Throws(CborDecodeException::class)
     fun `null`(): Nothing? {
         return read { `null`() }
     }
 
-    /** @see CborReadSingleValue.undefined */
+    /** @see CborReadSingle.undefined */
     @Throws(CborDecodeException::class)
     fun undefined() {
         return read { undefined() }
     }
 
-    /** @see CborReadSingleValue.float */
+    /** @see CborReadSingle.float */
     @Throws(CborDecodeException::class)
     fun float(): Double {
         return read { float() }
     }
 
-    /** @see CborReadSingleValue.tag */
+    /** @see CborReadSingle.tag */
     @Throws(CborDecodeException::class)
     inline fun <T> tag(expectedTag: Long = ANY_TAG, readTagged: CborRead.(tag: Long) -> T): T {
         return read { tag(expectedTag, readTagged) }
     }
 
-    /** @see CborReadSingleValue.blob */
+    /** @see CborReadSingle.blob */
     @Throws(CborDecodeException::class)
     fun blob(expectedLength: Int = ANY): ByteArray {
         return read { blob(expectedLength) }
     }
 
-    /** @see CborReadSingleValue.blob */
+    /** @see CborReadSingle.blob */
     @Throws(CborDecodeException::class)
     inline fun <T> blob(expectedLength: Int = ANY, read: ByteRead.() -> T): T {
         return read { blob(expectedLength, read) }
     }
 
-    /** @see CborReadSingleValue.string */
+    /** @see CborReadSingle.string */
     @Throws(CborDecodeException::class)
     fun string(): CharSequence {
         return read { string() }
     }
 
-    /** @see CborReadSingleValue.arrayRaw */
+    /** @see CborReadSingle.arrayRaw */
     @Throws(CborDecodeException::class)
     inline fun <T> array(read: CborRead.(countHint: Int) -> T): T {
         return read { arrayRaw(read) }
     }
 
-    /** @see CborReadSingleValue.arrayInto */
+    /** @see CborReadSingle.arrayInto */
     @Throws(CborDecodeException::class)
     inline fun <T> arrayInto(out: MutableCollection<T>, read: CborDeserialize<T>) {
         return read { arrayInto(out, read) }
     }
 
-    /** @see CborReadSingleValue.mapRaw */
+    /** @see CborReadSingle.mapRaw */
     @Throws(CborDecodeException::class)
     inline fun <T> map(read: CborRead.(pairCountHint: Int) -> T): T {
         return read { mapRaw(read) }
     }
 
-    /** @see CborReadSingleValue.value */
+    /** @see CborReadSingle.value */
     @Throws(CborDecodeException::class)
-    fun <T> value(serializer: CborSerializer<T>): T {
+    fun <T> value(deserializer: CborDeserialize<T>): T {
         return read {
-            value(serializer)
+            with(deserializer) {
+                deserialize()
+            }
         }
     }
 
-    /** @see CborReadSingleValue.obj */
+    /** @see CborReadSingle.obj */
     inline fun <T> obj(read: CborReadFields.() -> T):T {
         return read { obj(read) }
     }
@@ -1256,7 +1265,7 @@ class CborWrite(out: ByteWrite) {
         writeValuePayload(length, writeItems)
     }
 
-    fun <T> array(collection: Collection<T>, serializer: CborSerializer<T>) {
+    fun <T> array(collection: Collection<T>, serializer: CborSerialize<T>) {
         array(collection.size) {
             for (value in collection) {
                 value(value, serializer)
@@ -1289,13 +1298,13 @@ class CborWrite(out: ByteWrite) {
         writeValuePayload(length * 2, writeItems)
     }
 
-    inline fun <K,V> map(m: Map<K, V>, writeKey: CborWrite.(K) -> Unit, writeValue: CborWrite.(V) -> Unit) {
+    inline fun <K,V> map(m: Map<K, V>, writeKey: CborSerialize<K>, writeValue: CborSerialize<V>) {
         val size = m.size
         map(size) {
             if (size > 0) {
                 for (entry in m) {
-                    writeKey(entry.key)
-                    writeValue(entry.value)
+                    with(writeKey) { serialize(entry.key) }
+                    with(writeValue) { serialize(entry.value) }
                 }
             }
         }
@@ -1326,7 +1335,7 @@ class CborWrite(out: ByteWrite) {
         nextFieldAtLeast = oldNextField
     }
 
-    fun <T> value(value: T, serializer: CborSerializer<T>) {
+    fun <T> value(value: T, serializer: CborSerialize<T>) {
         val valuesBefore = valuesWritten
         serializer.apply {
             serialize(value)
@@ -1424,7 +1433,7 @@ class CborWrite(out: ByteWrite) {
             cborWrite.writeValuePayload(1, write)
         }
 
-        fun <T> field(fieldId: Int, value: T, serializer: CborSerializer<T>) {
+        fun <T> field(fieldId: Int, value: T, serializer: CborSerialize<T>) {
             field(fieldId)
             cborWrite.value(value, serializer)
         }
@@ -1471,15 +1480,27 @@ class CborWrite(out: ByteWrite) {
                 cborWrite.float(value)
             }
         }
+        fun fieldOrNull(fieldId: Int, value: String?) {
+            if (value != null) {
+                field(fieldId)
+                cborWrite.string(value)
+            }
+        }
+        fun fieldOrNull(fieldId: Int, value: ByteArray?) {
+            if (value != null) {
+                field(fieldId)
+                cborWrite.blob(value)
+            }
+        }
 
-        fun <T> fieldOrNull(fieldId: Int, value: T?, serializer: CborSerializer<T>) {
+        fun <T> fieldOrNull(fieldId: Int, value: T?, serializer: CborSerialize<T>) {
             if (value != null) {
                 field(fieldId)
                 cborWrite.value(value, serializer)
             }
         }
 
-        fun <T> fieldOr(fieldId: Int, value: T, defaultValue: T, serializer: CborSerializer<T>) {
+        fun <T> fieldOr(fieldId: Int, value: T, defaultValue: T, serializer: CborSerialize<T>) {
             if (value != defaultValue) {
                 field(fieldId)
                 cborWrite.value(value, serializer)
@@ -1773,7 +1794,7 @@ fun interface CborDeserialize<T> {
 interface CborSerializer<T> : CborSerialize<T>, CborDeserialize<T>
 
 /** Convenience function to serialize object into CBOR bytes. */
-fun <T> CborSerializer<T>.serializeToBytes(value: T): ByteArray {
+fun <T> CborSerialize<T>.serializeToBytes(value: T): ByteArray {
     val data = ByteData()
     val cw = CborWrite(data)
     cw.value(value, this)
@@ -1788,7 +1809,7 @@ inline fun serializeCborToBytes(block: CborWrite.() -> Unit): ByteArray {
 }
 
 /** Convenience function to deserialize CBOR bytes into an object. */
-fun <T> CborSerializer<T>.deserializeBytes(value: ByteArray, start: Int = 0, end: Int = value.size): T {
+fun <T> CborDeserialize<T>.deserializeBytes(value: ByteArray, start: Int = 0, end: Int = value.size): T {
     val data = ByteData()
     data.resetForReading(value, start, end)
     val cw = CborRead(data)
@@ -1802,7 +1823,7 @@ inline fun <T> deserializeCborFromBytes(value: ByteArray, start: Int = 0, end: I
     return cw.block()
 }
 
-typealias CborReadSingle = CborRead.CborReadSingleValue
+typealias CborReadSingle = CborRead.CborReadSingle
 
 class CborDecodeException(message: String) : Exception(message) {
     constructor(expected: String, got: CborValue?) : this("Expected $expected, got ${got ?: "<break>"}")
@@ -1880,7 +1901,7 @@ value class Half(val raw: Int) {
         val f32Bits = if (exp == 0x1f) {
             if (coef == 0) {
                 // infinity
-                sign or 0x7f800000 or coef
+                sign or 0x7f800000
             } else {
                 // NaN
                 sign or 0x7fc00000 or coef

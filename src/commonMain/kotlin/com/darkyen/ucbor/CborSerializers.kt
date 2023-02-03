@@ -1,6 +1,9 @@
 package com.darkyen.ucbor
 
-
+/**
+ * A collection of serializers for common types.
+ * It is usually faster to use dedicated functions for primitive types to avoid boxing.
+ */
 object CborSerializers {
     object IntSerializer : CborSerializer<Int> {
         override fun CborWrite.serialize(value: Int) {
@@ -29,6 +32,16 @@ object CborSerializers {
 
         override fun CborReadSingle.deserialize(): String {
             return string().toString()
+        }
+    }
+
+    object BlobSerializer : CborSerializer<ByteArray> {
+        override fun CborWrite.serialize(value: ByteArray) {
+            blob(value)
+        }
+
+        override fun CborReadSingle.deserialize(): ByteArray {
+            return blob()
         }
     }
 
