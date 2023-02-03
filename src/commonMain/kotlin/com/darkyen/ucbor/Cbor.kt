@@ -824,8 +824,14 @@ class CborRead(
             return field(fieldId, { if (type.float) float() else 0.0 }, { 0.0 })
         }
 
+        fun fieldString(fieldId: Int): String {
+            return field(fieldId) { string().toString() }
+        }
         fun fieldStringOrNull(fieldId: Int): String? {
             return field(fieldId, { if (type == CborValueType.TEXT) string().toString() else null }, { null })
+        }
+        fun fieldBlob(fieldId: Int): ByteArray {
+            return field(fieldId) { blob() }
         }
         fun fieldBlobOrNull(fieldId: Int): ByteArray? {
             return field(fieldId, { if (type == CborValueType.BLOB) blob() else null }, { null })
@@ -1480,6 +1486,10 @@ class CborWrite(out: ByteWrite) {
                 cborWrite.float(value)
             }
         }
+        fun field(fieldId: Int, value: String) {
+            field(fieldId)
+            cborWrite.string(value)
+        }
         fun fieldOrNull(fieldId: Int, value: String?) {
             if (value != null) {
                 field(fieldId)
@@ -1491,6 +1501,10 @@ class CborWrite(out: ByteWrite) {
                 field(fieldId)
                 cborWrite.blob(value)
             }
+        }
+        fun field(fieldId: Int, value: ByteArray) {
+            field(fieldId)
+            cborWrite.blob(value)
         }
 
         fun <T> fieldOrNull(fieldId: Int, value: T?, serializer: CborSerialize<T>) {
