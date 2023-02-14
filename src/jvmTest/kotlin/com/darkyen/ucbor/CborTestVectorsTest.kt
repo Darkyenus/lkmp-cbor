@@ -1,14 +1,22 @@
+@file:Suppress("IMPLICIT_NOTHING_TYPE_ARGUMENT_IN_RETURN_POSITION")
+
 package com.darkyen.ucbor
 
-import kotlin.test.*
 import com.esotericsoftware.jsonbeans.JsonReader
+import io.kotest.assertions.withClue
+import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.booleans.shouldBeFalse
+import io.kotest.matchers.booleans.shouldBeTrue
+import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.nulls.shouldNotBeNull
+import io.kotest.matchers.shouldBe
 import java.io.File
 import java.net.URL
 
-class CborTestVectorsTest {
+class CborTestVectorsTest : FunSpec({
 
-    @Test
-    fun vectors() {
+    test("vectors") {
         val data = URL("https://raw.githubusercontent.com/Darkyenus/cbor-test-vectors/master/vectors.json").openStream().use {
             JsonReader().parse(it)
         }
@@ -52,18 +60,18 @@ class CborTestVectorsTest {
                 if (valid) {
                     val cr = CborRead(bd)
                     val value = cr.value()
-                    assertFalse(bd.canRead(1))
-                    assertNotEquals(null, value)
-                    assertTrue(value!!.isValid())
+                    bd.canRead(1).shouldBeFalse()
+                    value.shouldNotBeNull()
+                    value.isValid().shouldBeTrue()
 
-                    assertNull(cr.value())
+                    cr.value().shouldBeNull()
 
                     if ("canonical" in flags) {
                         val out = ByteData()
                         val cw = CborWrite(out)
                         cw.value(value)
 
-                        assertContentEquals(bd.toByteArray(), out.toByteArray())
+                        out.toByteArray().toList().shouldContainExactly(bd.toByteArray().toList())
                     }
 
                     passthroughTest(ByteData(), value)
@@ -73,17 +81,17 @@ class CborTestVectorsTest {
                     // Also skip on raw data
                     bd.rewindReading()
                     val skipped = cr.skipValue()
-                    assertTrue(skipped)
-                    assertNull(cr.value())
-                    assertFalse(bd.canRead(1))
+                    skipped.shouldBeTrue()
+                    cr.value().shouldBeNull()
+                    bd.canRead(1).shouldBeFalse()
                     val skippedEof = cr.skipValue()
-                    assertFalse(skippedEof)
+                    skippedEof.shouldBeFalse()
 
                     if (diagnostic != null) {
                         val expected = if ("float" in flags) {
                             floatDiagnosticAlts[diagnostic] ?: diagnostic
                         } else diagnostic
-                        assertEquals(expected, value.toString())
+                        value.toString() shouldBe expected
                     }
                 } else {
                     val cr = CborRead(bd)
@@ -91,10 +99,12 @@ class CborTestVectorsTest {
                         val value = cr.value()
                         // Exception was not thrown, ok, expect something invalid inside
 
-                        if (value != null) {
-                            assertTrue(!value.isValid() || bd.canRead(1), "$hex -> $value")
-                        } else {
-                            assertNotEquals(null, value)
+                        withClue({"$hex -> $value"}) {
+                            if (value != null) {
+                                (!value.isValid() || bd.canRead(1)).shouldBeTrue()
+                            } else {
+                                value.shouldNotBeNull()
+                            }
                         }
                     } catch (e: CborDecodeException) {
                         // This is expected
@@ -107,12 +117,12 @@ class CborTestVectorsTest {
         }
     }
 
-    private val floatDiagnosticAlts: Map<String, String> = mapOf(
-        "3.40282346638529e+38" to "3.4028234663852886E38",
-        "1.0e+300" to "1.0E300",
-        "5.96046447753906e-8" to "5.9604644775390625E-8",
-        "6.103515625e-5" to "6.103515625E-5",
-        "1(1363896240.5)" to "1(1.3638962405E9)",
-    )
+})
 
-}
+private val floatDiagnosticAlts: Map<String, String> = mapOf(
+    "3.40282346638529e+38" to "3.4028234663852886E38",
+    "1.0e+300" to "1.0E300",
+    "5.96046447753906e-8" to "5.9604644775390625E-8",
+    "6.103515625e-5" to "6.103515625E-5",
+    "1(1363896240.5)" to "1(1.3638962405E9)",
+)

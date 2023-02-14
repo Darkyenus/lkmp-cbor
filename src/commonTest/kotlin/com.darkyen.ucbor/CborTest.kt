@@ -1,11 +1,18 @@
 package com.darkyen.ucbor
 
+import io.kotest.assertions.fail
+import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.assertions.withClue
+import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.booleans.shouldBeFalse
+import io.kotest.matchers.booleans.shouldBeTrue
+import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldHave
 import kotlin.math.PI
 import kotlin.random.Random
-import kotlin.test.*
 
-class CborTest {
-
+class CborTest : FunSpec({
     fun generateTestValues(seed: Int = 666): List<CborValue> {
         val random = Random(seed)
 
@@ -102,14 +109,13 @@ class CborTest {
         return values
     }
 
-    @Test
-    fun basics() {
+    test("basics") {
         val testValues = generateTestValues()
 
         // Test reproducibility of test value generation and equals()
         for ((value1, value2) in testValues.zip(generateTestValues())) {
-            assertEquals(value1, value2)
-            assertEquals(value1.hashCode(), value2.hashCode())
+            value1 shouldBe value2
+            value1.hashCode() shouldBe value2.hashCode()
         }
 
         // Passthrough test
@@ -126,9 +132,7 @@ class CborTest {
         }
     }
 
-    @Ignore
-    @Test
-    fun floatTest() {
+    test("floatTest") {
         // This tests differences between floats in browser and on JVM
 
         val data = ByteData()
@@ -164,19 +168,20 @@ class CborTest {
             write.value(v)
             val read = CborRead(data)
             val readValue = read.value()
-            assertEquals(v, readValue, "CBOR: ${data.toByteArray().toHexString()}")
+            withClue({"CBOR: ${data.toByteArray().toHexString()}"}) {
+                readValue shouldBe v
+            }
         }
     }
 
-    @Test
-    fun objTest() {
+    test("objTest") {
         wr({
             obj {
                 field(1) { int(55) }
             }
         }, {
             obj {
-                field(1) { assertEquals(55, int()) }
+                field(1) { int() shouldBe 55 }
             }
         })
 
@@ -216,12 +221,12 @@ class CborTest {
             obj {
                 field(999) {
                     blob {
-                        assertEquals(1234567890L, readRawBE(6))
-                        assertEquals(1234567890L, readRawLE(6))
+                        readRawBE(6) shouldBe 1234567890L
+                        readRawLE(6) shouldBe 1234567890L
                         val readBytes = ByteArray(randomBytes.size)
                         val r = readRaw(readBytes)
-                        assertEquals(r, readBytes.size)
-                        assertContentEquals(randomBytes, readBytes)
+                        r shouldBe readBytes.size
+                        readBytes.toList().shouldContainExactly(randomBytes.toList())
                     }
                 }
             }
@@ -244,8 +249,8 @@ class CborTest {
                         readSkip(12)
                         val readBytes = ByteArray(randomBytes.size)
                         val r = readRaw(readBytes)
-                        assertEquals(r, readBytes.size)
-                        assertContentEquals(randomBytes, readBytes)
+                        r shouldBe readBytes.size
+                        readBytes.toList().shouldContainExactly(randomBytes.toList())
                     }
                 }
             }
@@ -265,12 +270,12 @@ class CborTest {
             obj {
                 field(999) {
                     blob {
-                        assertEquals(1234567890L, readRawBE(6))
-                        assertEquals(1234567890L, readRawLE(6))
+                        readRawBE(6) shouldBe 1234567890L
+                        readRawLE(6) shouldBe 1234567890L
                         val readBytes = ByteArray(randomBytes.size)
                         val r = readRaw(readBytes)
-                        assertEquals(r, readBytes.size)
-                        assertContentEquals(randomBytes, readBytes)
+                        r shouldBe readBytes.size
+                        readBytes.toList().shouldContainExactly(randomBytes.toList())
                     }
                 }
             }
@@ -290,7 +295,7 @@ class CborTest {
             obj {
                 field(999) {
                     blob {
-                        assertEquals(randomBytes.size + 12, readSkip(9999999))
+                        readSkip(9999999) shouldBe (randomBytes.size + 12)
                     }
                 }
             }
@@ -310,7 +315,7 @@ class CborTest {
             obj {
                 field(999) {
                     blob {
-                        assertEquals(randomBytes.size + 12, readSkip(9999999))
+                        readSkip(9999999) shouldBe (randomBytes.size + 12)
                     }
                 }
             }
@@ -333,7 +338,7 @@ class CborTest {
             }
         }, {
             array { items ->
-                assertEquals(3, items)
+                items shouldBe 3
                 var iteration = 0
                 do {
                     val done = read {
@@ -342,15 +347,15 @@ class CborTest {
                         } else {
                             iteration++
                             obj {
-                                assertEquals(10*iteration, fieldInt32OrZero(0))
-                                assertEquals(10*iteration + 1, fieldInt32OrZero(1))
-                                assertEquals(0, fieldInt32OrZero(2))
+                                fieldInt32OrZero(0) shouldBe (10*iteration)
+                                fieldInt32OrZero(1) shouldBe (10*iteration + 1)
+                                fieldInt32OrZero(2) shouldBe (0)
                             }
                             false
                         }
                     }
                 } while (!done)
-                assertEquals(3, iteration)
+                iteration shouldBe 3
             }
         })
 
@@ -381,7 +386,7 @@ class CborTest {
             obj {
                 field(0) {
                     arrayRaw { items ->
-                        assertEquals(3, items)
+                        items shouldBe 3
                         var iteration = 0
                         do {
                             val done = read {
@@ -390,23 +395,23 @@ class CborTest {
                                 } else {
                                     iteration++
                                     obj {
-                                        assertEquals(10*iteration, fieldInt32OrZero(0))
-                                        assertEquals(10*iteration + 1, fieldInt32OrZero(1))
-                                        assertEquals(10*iteration + 2, fieldInt32OrZero(2))
-                                        assertEquals(0, fieldInt32OrZero(3))
+                                        fieldInt32OrZero(0) shouldBe (10*iteration)
+                                        fieldInt32OrZero(1) shouldBe (10*iteration + 1)
+                                        fieldInt32OrZero(2) shouldBe (10*iteration + 2)
+                                        fieldInt32OrZero(3) shouldBe (0)
                                     }
                                     false
                                 }
                             }
                         } while (!done)
-                        assertEquals(3, iteration)
+                        iteration shouldBe 3
                     }
                 }
-                assertEquals(55, fieldIntOrZero(1))
+                fieldIntOrZero(1) shouldBe 55
             }
         })
 
-        assertFailsWith<CborDecodeException> {
+        shouldThrow<CborDecodeException> {
             wr({
                 obj {
                     field(999) {
@@ -421,14 +426,14 @@ class CborTest {
                 obj {
                     field(999) {
                         blob {
-                            assertEquals(7, readSkip(7))
+                            readSkip(7) shouldBe 7
                         }
                     }
                 }
             })
         }
 
-        assertFailsWith<CborDecodeException> {
+        shouldThrow<CborDecodeException> {
             wr({
                 obj {
                     field(999) {
@@ -443,15 +448,15 @@ class CborTest {
                 obj {
                     field(999) {
                         blob(randomBytes.size + 12 + 666) {
-                            assertEquals(7, readSkip(7))
-                            assertEquals(randomBytes.size + 12 - 7, readSkip(9999))
+                            readSkip(7) shouldBe (7)
+                            readSkip(9999) shouldBe (randomBytes.size + 12 - 7)
                         }
                     }
                 }
             })
         }
 
-        assertFailsWith<CborDecodeException> {
+        shouldThrow<CborDecodeException> {
             wr({
                 obj {
                     field(999) {
@@ -466,8 +471,8 @@ class CborTest {
                 obj {
                     field(999) {
                         blob(randomBytes.size + 12 + 666) {
-                            assertEquals(7, readSkip(7))
-                            assertEquals(randomBytes.size + 12 - 7, readSkip(9999))
+                            readSkip(7) shouldBe (7)
+                            readSkip(9999) shouldBe (randomBytes.size + 12 - 7)
                         }
                     }
                 }
@@ -485,7 +490,7 @@ class CborTest {
         }, {
             obj {
                 field(999) {
-                    assertContentEquals(randomBytes, blob(randomBytes.size))
+                    blob(randomBytes.size).toList().shouldContainExactly(randomBytes.toList())
                 }
             }
         })
@@ -501,20 +506,20 @@ class CborTest {
         }, {
             obj {
                 field(999) {
-                    assertContentEquals(randomBytes, blob())
+                    blob().toList().shouldContainExactly(randomBytes.toList())
                 }
             }
         })
 
-        assertFailsWith<CborEncodeError> {
+        shouldThrow<CborEncodeError> {
             wr({
-                    blob(15) {
-                        writeInt(15)
-                    }
+                blob(15) {
+                    writeInt(15)
+                }
             }, {})
         }
 
-        assertFailsWith<CborEncodeError> {
+        shouldThrow<CborEncodeError> {
             wr({
                 map {
                     string("Key without value")
@@ -522,7 +527,7 @@ class CborTest {
             }, {})
         }
 
-        assertFailsWith<CborEncodeError> {
+        shouldThrow<CborEncodeError> {
             wr({
                 map {
                     value("Key without value", object : CborSerializer<String> {
@@ -541,22 +546,22 @@ class CborTest {
         }
 
         wr({
-                array {
-                    int(10)
-                    int(11)
-                    int(12)
-                }
+            array {
+                int(10)
+                int(11)
+                int(12)
+            }
         }, {
             array {
-                assertEquals(0, it)
-                assertEquals(10, int())
-                assertEquals(11, int())
-                assertEquals(12, int())
-                assertEquals(false, skipValue())
+                it shouldBe 0
+                int() shouldBe 10
+                int() shouldBe 11
+                int() shouldBe 12
+                skipValue() shouldBe false
             }
         })
 
-        assertFailsWith<CborEncodeError> {
+        shouldThrow<CborEncodeError> {
             wr({
                 obj {
                     field(10) { int(10) }
@@ -565,7 +570,7 @@ class CborTest {
             }, {})
         }
 
-        assertFailsWith<CborDecodeError> {
+        shouldThrow<CborDecodeError> {
             wr({
                 map {
                     int(10); int(10)
@@ -574,7 +579,7 @@ class CborTest {
             }, {
                 obj {
                     field(10) {
-                        assertEquals(10, int())
+                        int() shouldBe 10
                     }
                     field(5) {
                         fail("Should not be readable, fields must be ordered")
@@ -591,11 +596,11 @@ class CborTest {
         }, {
             obj {
                 field(10) {
-                    assertEquals(10, int())
+                    int() shouldBe 10
                 }
                 field(11, { fail("nope") }, { })
                 field(15) {
-                    assertEquals(15, int())
+                    int() shouldBe 15
                 }
                 field(16, { fail("nope") }, { })
             }
@@ -611,10 +616,14 @@ class CborTest {
                 for (i in 0 until 20) {
                     field(i, {
                         val value = int()
-                        assertTrue(i == 10 || i == 15, "$i")
-                        assertEquals(i.toLong(), value)
+                        withClue({"$i"}) {
+                            (i == 10 || i == 15).shouldBeTrue()
+                        }
+                        value shouldBe i.toLong()
                     }, {
-                        assertFalse(i == 10 || i == 15, "$i")
+                        withClue({"$i"}) {
+                            (i == 10 || i == 15).shouldBeFalse()
+                        }
                     })
                 }
             }
@@ -630,10 +639,14 @@ class CborTest {
                 for (i in 0 until 20 step 2) {
                     field(i, {
                         val value = int()
-                        assertTrue(i == 10 || i == 15, "$i")
-                        assertEquals(i.toLong(), value)
+                        withClue({"$i"}) {
+                            (i == 10 || i == 15).shouldBeTrue()
+                        }
+                        value shouldBe i.toLong()
                     }, {
-                        assertFalse(i == 10 || i == 15, "$i")
+                        withClue({"$i"}) {
+                            (i == 10 || i == 15).shouldBeFalse()
+                        }
                     })
                 }
             }
@@ -652,10 +665,14 @@ class CborTest {
                 for (i in 0 until 20 step 2) {
                     field(i, {
                         val value = int()
-                        assertTrue(i == 10 || i == 15, "$i")
-                        assertEquals(i.toLong(), value)
+                        withClue({"$i"}) {
+                            (i == 10 || i == 15).shouldBeTrue()
+                        }
+                        value shouldBe i.toLong()
                     }, {
-                        assertFalse(i == 10 || i == 15, "$i")
+                        withClue({"$i"}) {
+                            (i == 10 || i == 15).shouldBeFalse()
+                        }
                     })
                 }
             }
@@ -677,10 +694,14 @@ class CborTest {
                 for (i in 0 until 20 step 2) {
                     field(i, {
                         val value = int()
-                        assertTrue(i == 10 || i == 15, "$i")
-                        assertEquals(i.toLong(), value)
+                        withClue({"$i"}) {
+                            (i == 10 || i == 15).shouldBeTrue()
+                        }
+                        value shouldBe i.toLong()
                     }, {
-                        assertFalse(i == 10 || i == 15, "$i")
+                        withClue({"$i"}) {
+                            (i == 10 || i == 15).shouldBeFalse()
+                        }
                     })
                 }
             }
@@ -700,10 +721,14 @@ class CborTest {
                 for (i in 0 until 20 step 2) {
                     field(i, {
                         val value = int()
-                        assertTrue(i == 10 || i == 15, "$i")
-                        assertEquals(i.toLong(), value)
+                        withClue({"$i"}) {
+                            (i == 10 || i == 15).shouldBeTrue()
+                        }
+                        value shouldBe i.toLong()
                     }, {
-                        assertFalse(i == 10 || i == 15, "$i")
+                        withClue({"$i"}) {
+                            (i == 10 || i == 15).shouldBeFalse()
+                        }
                     })
                 }
             }
@@ -724,14 +749,13 @@ class CborTest {
         })
     }
 
-    @Test
-    fun implicitObjTest() {
+    test("implicitObjTest") {
         wr({
             implicitObj {}
         },{
             implicitObj {
                 read {
-                    assertEquals(CborRead.CborValueType.END, type)
+                    type shouldBe CborRead.CborValueType.END
                 }
             }
         })
@@ -742,10 +766,10 @@ class CborTest {
             }
         },{
             implicitObj {
-                assertEquals(55, fieldInt32OrZero(5))
+                fieldInt32OrZero(5) shouldBe 55
 
                 read {
-                    assertEquals(CborRead.CborValueType.END, type)
+                    type shouldBe CborRead.CborValueType.END
                 }
             }
         })
@@ -757,18 +781,17 @@ class CborTest {
             }
         },{
             implicitObj {
-                assertEquals(55, fieldInt32OrZero(5))
-                assertEquals(66, fieldInt32OrZero(6))
+                fieldInt32OrZero(5) shouldBe 55
+                fieldInt32OrZero(6) shouldBe 66
 
                 read {
-                    assertEquals(CborRead.CborValueType.END, type)
+                    type shouldBe CborRead.CborValueType.END
                 }
             }
         })
     }
 
-    @Test
-    fun arrayCollectionTest() {
+    test("arrayCollectionTest") {
         for (list in arrayOf<Collection<String>>(
             emptyList(),
             listOf("Something"),
@@ -782,8 +805,8 @@ class CborTest {
                 read {
                     arrayInto(out, CborSerializers.StringSerializer)
                 }
-                assertContentEquals(list, out)
+                out.shouldContainExactly(list)
             })
         }
     }
-}
+})

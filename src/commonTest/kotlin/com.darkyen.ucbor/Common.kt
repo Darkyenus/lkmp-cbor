@@ -1,8 +1,9 @@
 package com.darkyen.ucbor
 
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
+import io.kotest.assertions.withClue
+import io.kotest.matchers.booleans.shouldBeFalse
+import io.kotest.matchers.booleans.shouldBeTrue
+import io.kotest.matchers.shouldBe
 
 
 fun passthroughTest(data: ByteData, value: CborValue) {
@@ -12,7 +13,9 @@ fun passthroughTest(data: ByteData, value: CborValue) {
     //println("$value -> ${data.toByteArray().toHexString()}")
     val read = CborRead(data)
     val readValue = read.value()
-    assertEquals(value, readValue, "CBOR: ${data.toByteArray().toHexString()}")
+    withClue({"CBOR: ${data.toByteArray().toHexString()}"}) {
+        readValue shouldBe value
+    }
 }
 
 fun skipTest(data: ByteData, value: CborValue) {
@@ -21,9 +24,9 @@ fun skipTest(data: ByteData, value: CborValue) {
     cr.value(value)
     val read = CborRead(data)
     val skipped = read.skipValue()
-    assertTrue(skipped)
+    skipped.shouldBeTrue()
     val skippedEof = read.skipValue()
-    assertFalse(skippedEof)
+    skippedEof.shouldBeFalse()
 }
 
 fun wr(write: CborWrite.() -> Unit, read: CborRead.() -> Unit) {

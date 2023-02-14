@@ -1,5 +1,6 @@
 plugins {
-    kotlin("multiplatform") version "1.8.0"
+    kotlin("multiplatform") version "1.7.22"
+    id("io.kotest.multiplatform") version "5.5.5"
     `maven-publish`
 }
 
@@ -10,45 +11,34 @@ repositories {
     mavenCentral()
 }
 
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
+}
+
 kotlin {
     jvm {
         compilations.all {
             kotlinOptions.jvmTarget = "1.8"
         }
-        withJava()
-        testRuns["test"].executionTask.configure {
-            useJUnitPlatform()
-        }
     }
     js(IR) {
         browser {
-            commonWebpackConfig {
-                cssSupport {
-                    enabled.set(true)
-                }
-            }
             testTask {
                 useKarma {
                     useChromiumHeadless()
+                    useFirefoxDeveloperHeadless()
                 }
             }
         }
     }
-    val hostOs = System.getProperty("os.name")
-    val isMingwX64 = hostOs.startsWith("Windows")
-    val nativeTarget = when {
-        hostOs == "Mac OS X" -> macosX64("native")
-        hostOs == "Linux" -> linuxX64("native")
-        isMingwX64 -> mingwX64("native")
-        else -> throw GradleException("Host OS is not supported in Kotlin/Native.")
-    }
 
-    
+    val kotest = "5.5.5"
     sourceSets {
         val commonMain by getting
         val commonTest by getting {
             dependencies {
-                implementation(kotlin("test"))
+                implementation("io.kotest:kotest-framework-engine:$kotest")
+                implementation("io.kotest:kotest-assertions-core:$kotest")
             }
         }
         val jvmMain by getting
@@ -58,11 +48,10 @@ kotlin {
             }
             dependencies {
                 implementation("com.github.EsotericSoftware:jsonbeans:0.9")
+                implementation("io.kotest:kotest-runner-junit5:$kotest")
             }
         }
         val jsMain by getting
         val jsTest by getting
-        val nativeMain by getting
-        val nativeTest by getting
     }
 }
