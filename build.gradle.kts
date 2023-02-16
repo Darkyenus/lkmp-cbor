@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.darkyen"
-version = "0.2"
+version = "0.3"
 
 repositories {
     mavenCentral()
@@ -21,7 +21,7 @@ kotlin {
             kotlinOptions.jvmTarget = "1.8"
         }
     }
-    js(IR) {
+    js(BOTH) {
         browser {
             testTask {
                 useKarma {
