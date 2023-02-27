@@ -71,6 +71,34 @@ object CborSerializers {
         }
     }
 
+    @Suppress("BOUNDS_NOT_ALLOWED_IF_BOUNDED_BY_TYPE_PARAMETER")
+    class ListSerializer<V, M, MM> (
+        private val valueSerializer: CborSerializer<V>,
+        private val newList: (capacity: Int) -> MM
+    ) : CborSerializer<M> where MM:MutableList<V>, MM:M, M:List<V> {
+
+        override fun CborWrite.serialize(value: M) {
+            array(value, valueSerializer)
+        }
+
+        override fun CborReadSingle.deserialize(): MM {
+            return arrayRaw { countHint ->
+                val out = newList(countHint)
+                do {
+                    val hasMore = read { type ->
+                        if (type == CborRead.CborValueType.END) {
+                            false
+                        } else {
+                            out.add(value(valueSerializer))
+                            true
+                        }
+                    }
+                } while (hasMore)
+                out
+            }
+        }
+    }
+
     class EnumSerializer<E : Enum<E>>(val values: Array<E>): CborSerializer<E> {
         override fun CborWrite.serialize(value: E) {
             int(value.ordinal)
