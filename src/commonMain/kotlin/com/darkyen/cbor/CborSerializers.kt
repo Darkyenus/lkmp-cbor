@@ -5,6 +5,16 @@ package com.darkyen.cbor
  * It is usually faster to use dedicated functions for primitive types to avoid boxing.
  */
 object CborSerializers {
+
+    object BooleanSerializer : CborSerializer<Boolean> {
+        override fun CborReadSingle.deserialize(): Boolean {
+            return boolean()
+        }
+        override fun CborWrite.serialize(value: Boolean) {
+            boolean(value)
+        }
+    }
+
     object IntSerializer : CborSerializer<Int> {
         override fun CborWrite.serialize(value: Int) {
             int(value.toLong())
