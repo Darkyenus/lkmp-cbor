@@ -1,4 +1,4 @@
-package com.darkyen.ucbor
+package com.darkyen.cbor
 
 import io.kotest.assertions.withClue
 import io.kotest.matchers.booleans.shouldBeFalse

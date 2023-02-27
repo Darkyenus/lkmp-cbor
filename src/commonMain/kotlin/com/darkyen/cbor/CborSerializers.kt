@@ -1,4 +1,4 @@
-package com.darkyen.ucbor
+package com.darkyen.cbor
 
 /**
  * A collection of serializers for common types.

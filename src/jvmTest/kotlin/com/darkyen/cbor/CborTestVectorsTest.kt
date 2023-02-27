@@ -1,6 +1,6 @@
 @file:Suppress("IMPLICIT_NOTHING_TYPE_ARGUMENT_IN_RETURN_POSITION")
 
-package com.darkyen.ucbor
+package com.darkyen.cbor
 
 import com.esotericsoftware.jsonbeans.JsonReader
 import io.kotest.assertions.withClue
@@ -11,7 +11,6 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
-import java.io.File
 import java.net.URL
 
 class CborTestVectorsTest : FunSpec({

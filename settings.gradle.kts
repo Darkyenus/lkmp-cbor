@@ -1,3 +1,3 @@
 
-rootProject.name = "ultralight-cbor"
+rootProject.name = "lkmp-cbor"
 

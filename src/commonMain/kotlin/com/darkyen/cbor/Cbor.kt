@@ -1,6 +1,6 @@
 @file:Suppress("unused", "FunctionName", "PropertyName", "LiftReturnOrAssignment", "MemberVisibilityCanBePrivate")
 
-package com.darkyen.ucbor
+package com.darkyen.cbor
 
 import kotlin.jvm.JvmInline
 import kotlin.math.max

@@ -1,6 +1,6 @@
 @file:Suppress("unused")
 
-package com.darkyen.ucbor
+package com.darkyen.cbor
 
 import java.io.InputStream
 import java.io.OutputStream

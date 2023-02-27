@@ -1,4 +1,4 @@
-package com.darkyen.ucbor
+package com.darkyen.cbor
 
 
 typealias Codepoint = Int

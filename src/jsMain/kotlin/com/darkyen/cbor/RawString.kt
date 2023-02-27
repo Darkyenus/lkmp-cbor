@@ -1,4 +1,4 @@
-package com.darkyen.ucbor
+package com.darkyen.cbor
 
 import org.khronos.webgl.ArrayBuffer
 import org.khronos.webgl.Int8Array
