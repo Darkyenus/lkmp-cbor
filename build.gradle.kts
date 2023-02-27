@@ -21,7 +21,7 @@ kotlin {
             kotlinOptions.jvmTarget = "1.8"
         }
     }
-    js(BOTH) {
+    js(IR) {
         browser {
             testTask {
                 useKarma {
