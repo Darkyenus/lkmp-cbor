@@ -1,4 +1,4 @@
-@file:Suppress("unused", "FunctionName", "PropertyName", "LiftReturnOrAssignment", "MemberVisibilityCanBePrivate")
+@file:Suppress("unused", "FunctionName", "PropertyName", "LiftReturnOrAssignment", "MemberVisibilityCanBePrivate", "NOTHING_TO_INLINE")
 
 package com.darkyen.cbor
 
@@ -40,10 +40,29 @@ class CborRead(
             get() = this == FLOAT16 || this == FLOAT32 || this == FLOAT64
     }
 
+    /** After reading a value, this holds the value's type. */
     @PublishedApi
     internal var _headerType: CborValueType = CborValueType.END
+    /**
+     * After reading a value, holds:
+     * For [CborValueType.INT], the signed int value.
+     * For [CborValueType.TAG], the unsigned tag value.
+     * For [CborValueType.BOOLEAN], 0/1 for false/true.
+     * For [CborValueType.FLOAT16], [CborValueType.FLOAT32] and [CborValueType.FLOAT64], the raw value.
+     * Otherwise, holds 0.
+     */
     @PublishedApi
     internal var _headerArgument: Long = 0
+    /**
+     * After reading value of type [CborValueType.BLOB], [CborValueType.TEXT],
+     * [CborValueType.ARRAY] or [CborValueType.MAP],
+     * holds the amount of remaining payload elements (non-negative),
+     * or (iff indefinite) one of these negative constants:
+     * [REMAINING_SEQUENCE], [REMAINING_BLOB_CHUNKS], [REMAINING_STRING_CHUNKS],
+     * [REMAINING_INDEFINITE_LIST], [REMAINING_INDEFINITE_MAP_NEXT_KEY],
+     * [REMAINING_INDEFINITE_MAP_NEXT_VALUE], [REMAINING_BREAK].
+     * May also hold [REMAINING_ERROR]
+     */
     @PublishedApi
     internal var _payloadRemaining: Int = REMAINING_SEQUENCE
 
@@ -177,10 +196,9 @@ class CborRead(
                 if (!allowIndefinite) {
                     throw CborDecodeException("Unexpected indefinite argument of major type ${major ushr 5}")
                 }
-                0L
+                -1L
             }
         }
-        this._headerArgument = value
 
         if (contextPayloadRemaining == REMAINING_BLOB_CHUNKS && major != CborConstants.MAJOR_2_BLOB) {
             throw CborDecodeException("Unexpected major ${major ushr 5} when expecting blob chunks")
@@ -190,9 +208,12 @@ class CborRead(
         }
 
         val type = when (major) {
-            CborConstants.MAJOR_0_UINT -> CborValueType.INT
+            CborConstants.MAJOR_0_UINT -> {
+                _headerArgument = value
+                CborValueType.INT
+            }
             CborConstants.MAJOR_1_NINT -> {
-                this._headerArgument = -value - 1
+                _headerArgument = value.inv()
                 CborValueType.INT
             }
             CborConstants.MAJOR_2_BLOB -> {
@@ -236,6 +257,7 @@ class CborRead(
                 CborValueType.MAP
             }
             CborConstants.MAJOR_6_TAG -> {
+                _headerArgument = value
                 _payloadRemaining = 1
                 CborValueType.TAG
             }
@@ -250,9 +272,18 @@ class CborRead(
                 }
                 22 -> CborValueType.NULL
                 23 -> CborValueType.UNDEFINED
-                25 -> CborValueType.FLOAT16
-                26 -> CborValueType.FLOAT32
-                27 -> CborValueType.FLOAT64
+                25 -> {
+                    _headerArgument = value
+                    CborValueType.FLOAT16
+                }
+                26 -> {
+                    _headerArgument = value
+                    CborValueType.FLOAT32
+                }
+                27 -> {
+                    _headerArgument = value
+                    CborValueType.FLOAT64
+                }
                 else -> throw CborDecodeException("Unsupported minor $minor of major 7")
             }
             else -> throw CborDecodeError("Unsupported major $major")
@@ -495,9 +526,34 @@ class CborRead(
          * @throws CborDecodeException when the value is not an array or is an invalid value or [read] performs illegal calls (too many or not enough reads)
          */
         @Throws(CborDecodeException::class)
+        @Deprecated("This method is hard to use, use array() instead")
         inline fun <T> arrayRaw(read: CborRead.(countHint: Int) -> T): T {
             _cr._expectType(CborValueType.ARRAY)
-            return read(_cr, _cr._headerArgument.toInt())
+            return read(_cr, _cr._payloadRemaining.coerceAtLeast(0))
+        }
+
+        /**
+         * Read the next CBOR value which is an array.
+         * @param createCollection instantiates a collection that is then passed to first invocation of [readElement] or returned if there are no elements.
+         *      countHint is either non-negative, meaning that exactly this many values are in the collection, or negative, meaning that the size is indefinite.
+         * @param readElement called once for each element in the array. First [C] argument comes from [createCollection], subsequent calls are fed the result from last [readElement] call.
+         *      This way the collection can be mutable or immutable.
+         * @return result from last invocation of [readElement] (or [createCollection] if the collection was empty)
+         * @throws CborDecodeException when the value is not an array or [readElement] does not read exactly one CBOR value per call
+         */
+        @Throws(CborDecodeException::class)
+        inline fun <C> array(createCollection: (countHint: Int) -> C, readElement: CborReadSingle.(C) -> C): C {
+            _cr._expectType(CborValueType.ARRAY)
+            var collection = createCollection(_cr._payloadRemaining)
+            while (true) {
+                collection = _cr.read { type ->
+                    if (type == CborValueType.END) {
+                        return collection
+                    } else {
+                        readElement.invoke(this, collection)
+                    }
+                }
+            }
         }
 
         /**
@@ -508,22 +564,15 @@ class CborRead(
          */
         @Throws(CborDecodeException::class)
         inline fun <T, C:MutableCollection<T>> arrayInto(out: C, read: CborDeserialize<T>): C {
-            arrayRaw { countHint ->
+            return array({ countHint ->
                 if (countHint > 0 && out is ArrayList<*>) {
                     out.ensureCapacity(countHint)
                 }
-                do {
-                    val hasMore = read { type ->
-                        if (type == CborValueType.END) {
-                            false
-                        } else {
-                            out.add(with(read) { deserialize() })
-                            true
-                        }
-                    }
-                } while (hasMore)
-            }
-            return out
+                out
+            }, { collection ->
+                collection.add(value(read))
+                collection
+            })
         }
 
         /**
@@ -532,42 +581,50 @@ class CborRead(
          * @throws CborDecodeException when the value is not an array or is an invalid value or [read] performs illegal calls (too many or not enough reads)
          */
         @Throws(CborDecodeException::class)
+        @Deprecated("This method is hard to use, use array() instead")
         inline fun <T> mapRaw(read: CborRead.(pairCountHint: Int) -> T): T {
             _cr._expectType(CborValueType.MAP)
-            return read(_cr, _cr._headerArgument.toInt())
+            return read(_cr, _cr._payloadRemaining.coerceAtLeast(0))
+        }
+
+        /**
+         * Read the next CBOR value which is a map.
+         * @param createCollection instantiates a collection that is then passed to first invocation of [readValue] or returned if there are no elements.
+         *      countHint is either non-negative, meaning that exactly this many key-value pairs are in the collection, or negative, meaning that the size is indefinite.
+         * @param readValue called once for each value in the map. First [C] argument comes from [createCollection], subsequent calls are fed the result from last [readValue] call.
+         *      This way the collection can be mutable or immutable. [K] argument comes from [readKey] which read the key for this value.
+         * @return result from last invocation of [readValue] (or [createCollection] if the collection was empty)
+         * @throws CborDecodeException when the value is not a map or [readValue] does not read exactly one CBOR value per call
+         */
+        @Throws(CborDecodeException::class)
+        inline fun <C, K> map(createCollection: (countHint: Int) -> C, readKey: CborDeserialize<K>, readValue: CborReadSingle.(C, K) -> C): C {
+            _cr._expectType(CborValueType.MAP)
+            var collection: C = createCollection(_cr._payloadRemaining)
+            while (true) {
+                val key = _cr.read { type ->
+                    if (type == CborValueType.END) {
+                        return@map collection
+                    }
+                    value(readKey)
+                }
+                collection = _cr.read {
+                    readValue.invoke(this, collection, key)
+                }
+            }
         }
 
         inline fun <M:MutableMap<K, V>, K, V> map(newMap:(capacity: Int) -> M, readKey: CborDeserialize<K>, readValue: CborDeserialize<V>): M {
-            return mapRaw m@{ size ->
-                val result = newMap(size + size/2)
-                while (true) {
-                    val k = read { type ->
-                        if (type == CborValueType.END) {
-                            return@m result
-                        }
-                        with(readKey) { deserialize() }
-                    }
-                    val v = read { with(readValue) { deserialize() } }
-                    result[k] = v
-                }
-                @Suppress("UNREACHABLE_CODE")// Provides type inference
-                result
-            }
+            return map({newMap(it + it/2) }, readKey, { c, k ->
+                c[k] = with(readValue) { deserialize() }
+                c
+            })
         }
 
-        inline fun <K, V> mapInto(out:MutableMap<K, V>, readKey: CborDeserialize<K>, readValue: CborDeserialize<V>) {
-            return mapRaw m@{
-                while (true) {
-                    val k = read { type ->
-                        if (type == CborValueType.END) {
-                            return@m
-                        }
-                        value(readKey)
-                    }
-                    val v = value(readValue)
-                    out[k] = v
-                }
-            }
+        inline fun <K, V, C: MutableMap<K, V>> mapInto(out: C, readKey: CborDeserialize<K>, readValue: CborDeserialize<V>): C {
+            return map({ out }, readKey, { c, k ->
+                c[k] = with(readValue) { deserialize() }
+                c
+            })
         }
 
         /**
@@ -593,22 +650,16 @@ class CborRead(
                 CborValueType.INT -> CborValue.Int(_cr._headerArgument)
                 CborValueType.BLOB -> CborValue.Blob(blob())
                 CborValueType.TEXT -> CborValue.Text(string().toString())
-                CborValueType.ARRAY -> CborValue.Array(arrayRaw {
-                    val result = ArrayList<CborValue>(_payloadRemaining.let { if (it < 0) 10 else it })
-                    while (true) {
-                        result.add(value() ?: break)
-                    }
-                    result
-                })
-                CborValueType.MAP -> CborValue.Map(mapRaw {
-                    val result = ArrayList<Pair<CborValue, CborValue>>(_payloadRemaining.let { if (it < 0) 10 else it })
-                    while (true) {
-                        val key = value() ?: break
-                        val value = value()?: throw CborDecodeError("Unexpected EOF reading MAP key")
-                        result.add(key to value)
-                    }
-                    result
-                })
+                CborValueType.ARRAY -> CborValue.Array(array({
+                    if (it < 0) ArrayList() else ArrayList(it)
+                }, { c ->
+                    c.add(value() ?: throw CborDecodeError("Unexpected EOF reading array element"))
+                    c
+                }))
+                CborValueType.MAP -> CborValue.Map(map({ if (it < 0) ArrayList() else ArrayList(it) }, { value() ?: throw CborDecodeError("Unexpected EOF reading MAP key") }, { c, k ->
+                    c.add(k to (value() ?: throw CborDecodeError("Unexpected EOF reading MAP value")))
+                    c
+                }))
                 CborValueType.TAG -> tag { t ->
                     CborValue.Tag(t, value()!!/* can't be null, checked by readHeader */)
                 }
@@ -643,7 +694,8 @@ class CborRead(
                                 if (it == CborValueType.END) {
                                     false
                                 } else {
-                                    _cr._br.readSkip(_cr._headerArgument.toInt())
+                                    if (_cr._payloadRemaining < 0) throw CborDecodeError("Expected non-negative payloadRemaining: ${_cr._payloadRemaining}")
+                                    _cr._br.readSkip(_cr._payloadRemaining)
                                     _cr._payloadRemaining = 0
                                     true
                                 }
@@ -679,17 +731,16 @@ class CborRead(
          * Read object with fields. See [CborWrite.obj] for counterpart.
          */
         inline fun <T> obj(read: CborReadFields.() -> T):T {
-            return mapRaw {
-                val oldFieldProgress = this@CborReadSingle._cr._fieldProgress
-                this@CborReadSingle._cr._fieldProgress = FIELD_NONE
-                try {
-                    val crf = CborReadFields(this@CborReadSingle._cr)
-                    val result = read(crf)
-                    crf._skipRemainingFields()
-                    result
-                } finally {
-                    this@CborReadSingle._cr._fieldProgress = oldFieldProgress
-                }
+            _cr._expectType(CborValueType.MAP)
+            val oldFieldProgress = this@CborReadSingle._cr._fieldProgress
+            this@CborReadSingle._cr._fieldProgress = FIELD_NONE
+            try {
+                val crf = CborReadFields(this@CborReadSingle._cr)
+                val result = read(crf)
+                crf._skipRemainingFields()
+                return result
+            } finally {
+                this@CborReadSingle._cr._fieldProgress = oldFieldProgress
             }
         }
     }
@@ -992,6 +1043,7 @@ class CborRead(
 
     /** @see CborReadSingle.arrayRaw */
     @Throws(CborDecodeException::class)
+    @Deprecated("This method is hard to use, use array() instead", replaceWith = ReplaceWith("this.read { array (read) }"))
     inline fun <T> array(read: CborRead.(countHint: Int) -> T): T {
         return read { arrayRaw(read) }
     }
@@ -1003,6 +1055,7 @@ class CborRead(
     }
 
     /** @see CborReadSingle.mapRaw */
+    @Deprecated("This method is hard to use, use read{ map() } instead", replaceWith = ReplaceWith("this.read { map (read) }"))
     @Throws(CborDecodeException::class)
     inline fun <T> map(read: CborRead.(pairCountHint: Int) -> T): T {
         return read { mapRaw(read) }

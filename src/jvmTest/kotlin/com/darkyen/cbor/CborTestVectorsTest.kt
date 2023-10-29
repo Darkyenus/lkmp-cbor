@@ -79,6 +79,7 @@ class CborTestVectorsTest : FunSpec({
                     skipTest(ByteData(), value)
                     // Also skip on raw data
                     bd.rewindReading()
+                    cr.reset()
                     val skipped = cr.skipValue()
                     skipped.shouldBeTrue()
                     cr.value().shouldBeNull()

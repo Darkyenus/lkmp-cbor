@@ -1,5 +1,7 @@
 package com.darkyen.cbor
 
+import kotlin.time.Duration
+
 /**
  * A collection of serializers for common types.
  * It is usually faster to use dedicated functions for primitive types to avoid boxing.
@@ -63,17 +65,18 @@ object CborSerializers {
     ) : CborSerializer<M> where MM:MutableMap<K,V>, MM:M, M:Map<K, V> {
 
         override fun CborWrite.serialize(value: M) {
-            map(value, { value(it, keySerializer) }, { value(it, valueSerializer) })
+            map(value, keySerializer, valueSerializer)
         }
 
         override fun CborReadSingle.deserialize(): MM {
-            return map(newMap, { value(keySerializer) }, { value(valueSerializer) })
+            return map(newMap, keySerializer, valueSerializer)
         }
     }
 
     @Suppress("BOUNDS_NOT_ALLOWED_IF_BOUNDED_BY_TYPE_PARAMETER")
     class ListSerializer<V, M, MM> (
         private val valueSerializer: CborSerializer<V>,
+        /** Create a new list collection instance. The capacity is just a hint, may be zero if indefinite. */
         private val newList: (capacity: Int) -> MM
     ) : CborSerializer<M> where MM:MutableList<V>, MM:M, M:List<V> {
 
@@ -82,19 +85,9 @@ object CborSerializers {
         }
 
         override fun CborReadSingle.deserialize(): MM {
-            return arrayRaw { countHint ->
-                val out = newList(countHint)
-                do {
-                    val hasMore = read { type ->
-                        if (type == CborRead.CborValueType.END) {
-                            false
-                        } else {
-                            out.add(value(valueSerializer))
-                            true
-                        }
-                    }
-                } while (hasMore)
-                out
+            return array({ newList(it.coerceAtLeast(0)) }) { c ->
+                c.add(value(valueSerializer))
+                c
             }
         }
     }
