@@ -998,7 +998,7 @@ class CborRead(
 
     /** @see CborReadSingle.arrayInto */
     @Throws(CborDecodeException::class)
-    inline fun <T> arrayInto(out: MutableCollection<T>, read: CborDeserialize<T>) {
+    inline fun <T, C:MutableCollection<T>> arrayInto(out: C, read: CborDeserialize<T>): C {
         return read { arrayInto(out, read) }
     }
 
