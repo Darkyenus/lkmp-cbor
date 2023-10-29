@@ -503,12 +503,13 @@ class CborRead(
         /**
          * Read the next CBOR value which is an array.
          * @param read must read values until all are read
+         * @return [out], for convenience
          * @throws CborDecodeException when the value is not an array or is an invalid value or [read] performs illegal calls (too many or not enough reads)
          */
         @Throws(CborDecodeException::class)
-        inline fun <T> arrayInto(out: MutableCollection<T>, read: CborDeserialize<T>) {
+        inline fun <T, C:MutableCollection<T>> arrayInto(out: C, read: CborDeserialize<T>): C {
             arrayRaw { countHint ->
-                if (countHint > 0 && out is ArrayList) {
+                if (countHint > 0 && out is ArrayList<*>) {
                     out.ensureCapacity(countHint)
                 }
                 do {
@@ -522,6 +523,7 @@ class CborRead(
                     }
                 } while (hasMore)
             }
+            return out
         }
 
         /**
